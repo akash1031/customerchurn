@@ -1,0 +1,129 @@
+---
+title: "Exam 1 Advance R"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd("C:/Users/akash/Desktop/Spring 2017/Advance R/Exam1")
+getwd()
+```
+1. Load the dataset into R.
+
+
+```{r}
+
+mydata <- read.csv("exam1.csv", header=TRUE, sep=",")
+
+```
+
+2. Center and scale numerical predictors.
+```{r}
+sc <- scale(mydata[sapply(mydata, is.numeric)], center = TRUE, scale = TRUE)
+sc <- cbind.data.frame(as.data.frame(sc), as.data.frame(mydata$X15))
+head(sc)
+```
+
+3. Create dummy variables for any categorical predictors.
+```{r}
+dX15 <- as.numeric(mydata$X15 == "True")
+sc <- cbind.data.frame(as.data.frame(sc), as.data.frame(dX15))
+colnames(sc)[colnames(sc)=="mydata$X15"] <- "X15"
+head(sc)
+```
+
+4. Split the data into a training and test set. Set aside the test set until the end.
+```{r}
+sSize = nrow(sc)*0.8
+Splitteddata <- sample(nrow(sc), sSize, replace = TRUE)
+trainData<- sc[Splitteddata,]
+head(trainData)
+testData<- sc[-Splitteddata,]
+head(testData)
+
+```
+5. Split the training data using 4 fold cross validation.
+```{r}
+library(caret)
+trainDataFolds <- createFolds(trainData$X15, k = 4, list = TRUE)
+
+```
+
+6. Fit ridge regression models for a range of "lambda"2 values. Be sure to include large enough values of "lambda"2 that
+you see a decrease in performance.
+
+7. For each value of "lambda"2, you will have 4 models (1 for each fold). Evaluate the RMSE of all models on the
+fold not used to train. Use a loop for this.
+```{r}
+library(AppliedPredictiveModeling)
+library(penalized)
+library(glmnet)
+library(elasticnet)
+library(MASS)
+
+
+rmse <- function(a,b){
+  x= (a-b)^2
+  y= sqrt(mean(x))
+  return(y)
+}
+  
+  perf.df <- data.frame("q"=numeric(0))
+  average.root <- data.frame("t"= numeric(0))
+  sequence <- seq(0, 1,0.01 )
+  for (i in 1:length(sequence)) {
+    for (j in length(trainDataFolds)) {
+  crossvalidationTest <- trainData[trainDataFolds[[j]],]
+  crossvalidationTrain <- trainData[-trainDataFolds[[j]],]
+  crossvalidationTestCopy <- crossvalidationTest
+  crossvalidationTest$X15 <- NULL
+  crossvalidationTest$y <- NULL
+  ridge.reg <- penalized(y ~ X0+X1+X2+X3+X4+X5+X6+X7+X8+X9+X11+X12+X13+X14+dX15, data = crossvalidationTrain , lambda2 =sequence[[i]], standardize = TRUE)
+  predict.p<-predict(ridge.reg,crossvalidationTest)
+  rootmean <- rmse(predict.p, crossvalidationTestCopy$y)
+  average.root <- rbind(average.root, c(rootmean))
+    }
+  final.mean <- lapply(average.root, mean)
+  perf.df <- rbind(perf.df, c(final.mean))
+  }
+perf.df
+  
+```
+  
+
+8. Make a plot with "lambda"2 on the x-axis and the mean RMSE (average over the 4 folds) on the y-axis.
+```{r}
+rmse.plot <- data.frame(seq(0, 1, 0.01), perf.df)
+
+plot(rmse.plot)
+
+```
+
+
+9. Using this plot, select "lambda"2 for your model. Explain your reasoning.
+From the plot it can be observed that the value ofroot mean square error first increases as lambda increases and then decreases. It is minimum near to 0.4.Since we want RMSE to be minimized to get a good model,So, the value of lambda2 can be taken as 0.4.
+
+10. Fit a model on the complete training data using your selected value for "lambda"2.
+```{r}
+Final.regression <- penalized(y ~ X0+X1+X2+X3+X4+X5+X6+X7+X8+X9+X11+X12+X13+X14+dX15, data = trainData , lambda2 = 0.4, standardize = TRUE)
+Final.regression
+
+```
+
+11. Evaluate the R2 and RMSE of your model on the test set.
+```{r}
+testDataCopy <- testData
+testData$X15 <- NULL
+testData$y <- NULL
+Final.predict <- predict(Final.regression,testData)
+Final.rmse <- rmse(Final.predict, testDataCopy$y)
+Final.rmse
+
+mean.testdata <- lapply(testDataCopy$y, mean)
+SumofSquares.Total = sum((testDataCopy$y - mean(testDataCopy$y))^2)
+sumofSquares.Errors = sum((testDataCopy$y - Final.predict[ ,"mu"])^2)
+Rsquared = 1-(sumofSquares.Errors/SumofSquares.Total)
+Rsquared
